@@ -19,10 +19,10 @@ The project answers two questions through calibration:
 
 | File | Purpose |
 |------|---------|
-| `models.py` | Two simulation engines (`simulate_classical`, `simulate_chemical`) and shared parameters |
-| `simulation.py` | Monte Carlo runner: 1,000 trials per model, prints summary statistics |
-| `app.py` | Bar chart comparing ending-round distributions for both models |
-| `calibrate.py` | Grid search over CGT parameters to fit Ochs & Roth (1989) empirical data |
+| `models.py` | Two simulation engines (`simulate_classical`, `simulate_chemical`) and calibrated parameter sets |
+| `simulation.py` | Monte Carlo runner: 1,000 trials per scenario, prints summary statistics |
+| `app.py` | Bar chart comparing ending-round distributions across all three scenarios |
+| `calibrate.py` | Grid search that finds CGT parameters fitting the two calibration targets |
 | `requirements.txt` | Python dependencies (`numpy`, `matplotlib`) |
 
 ## Setup
@@ -47,7 +47,7 @@ python simulation.py
 python app.py
 ```
 
-**Calibrate CGT parameters against Ochs & Roth (1989)**:
+**Re-run the parameter calibration** (takes ~15 seconds):
 
 ```bash
 python calibrate.py
@@ -57,19 +57,19 @@ python calibrate.py
 
 ### 1. Classical (`simulate_classical`)
 
-Backward induction on a finite 3-round game. Under perfect rationality the equilibrium offer is always accepted in Round 1 — every trial ends immediately. The equilibrium offer to the responder is ~28.8% of the pie with the default discount factor δ = 0.8.
+Backward induction on a finite 3-round game. Under perfect rationality the equilibrium offer is always accepted in Round 1 — every trial ends immediately.
 
 Key parameters: `TOTAL_PIE`, `DELTA`, `MAX_ROUNDS` (top of `models.py`).
 
 ### 2 & 3. Chemical / CGT (`simulate_chemical`) — two calibrations
 
-Based on the framework in the CGT section of the project report. Each round, acceptance and rejection are treated as competing reaction pathways. Acceptance probability is computed via Boltzmann weighting of their Gibbs free energy terms:
+Based on the CGT framework in the project report. Each round, acceptance and rejection are treated as competing reaction pathways. Acceptance probability follows Boltzmann weighting of their Gibbs free energy terms:
 
 $$\Delta G_{\text{yes}}(m) = -\gamma_y \cdot m - \varepsilon$$
 $$\Delta G_{\text{no}}(m) = -\gamma_n \cdot m$$
 $$P(\text{yes}) = \frac{e^{-\Delta G_{\text{yes}}/RT}}{e^{-\Delta G_{\text{yes}}/RT} + e^{-\Delta G_{\text{no}}/RT}}$$
 
-where $m$ is the offer fraction to the responder. The constraint $\gamma_y > \gamma_n > 0$ ensures acceptance is always thermodynamically preferred, but small offers reduce the margin.
+where $m$ is the offer fraction to the responder. The constraint $\gamma_y > \gamma_n > 0$ ensures acceptance is always thermodynamically preferred, but the margin shrinks for small offers.
 
 Key parameters:
 
@@ -85,25 +85,44 @@ The same function is used for both CGT scenarios — only the parameter values d
 
 ## Calibration (`calibrate.py`)
 
-`calibrate.py` runs a grid search over CGT parameters against two targets:
+`calibrate.py` runs a grid search over the free CGT parameters — `RT`, `ε`, `γ_y`, `γ_n`, `offer_fraction` — against two targets. **δ is never a free parameter**: it is fixed by the experimental design of Ochs & Roth and held constant throughout.
 
-**Target 1 — Classical equilibrium** (game always ends in Round 1):
+---
+
+**Target 1 — Classical equilibrium** (game always ends in Round 1)
 
 | | Round 1 | Round 2 | Round 3 |
 |---|---|---|---|
 | Target | 100% | 0% | 0% |
 | Best-fit CGT | 100% | 0% | 0% |
 
-Key insight: very low `RT` (= 0.1) collapses the Boltzmann distribution toward certainty — CGT recovers deterministic rational behaviour.
+Best-fit params: `rt=0.1, epsilon=0.5, gamma_y=3.0, gamma_n=1.0, offer_fraction=0.40`
 
-**Target 2 — Ochs & Roth (1989) lab data** (3-period symmetric cells, n = 190):
+Key insight: very low `RT` (= 0.1) collapses the Boltzmann distribution toward certainty — CGT recovers deterministic rational behaviour regardless of δ.
 
-| | Round 1 | Round 2 | Round 3 | Acceptance rate |
+---
+
+**Target 2 — Ochs & Roth (1989) lab data**
+
+δ is fixed at the two experimental values and the search minimises the **average MSE across both conditions** simultaneously:
+
+| Condition | δ | R1 target | R2 target | R3 target | acc target |
+|---|---|---|---|---|---|
+| Cell 5 | 0.4 | 88% | 10% | 2% | 99% |
+| Cell 7 | 0.6 | 86% | 7% | 8% | 96% |
+
+Best-fit params: `rt=1.5, epsilon=3.0, gamma_y=3.0, gamma_n=3.0, offer_fraction=0.43`
+
+Simulation results with best-fit params:
+
+| Condition | δ | R1 sim | R2 sim | R3 sim |
 |---|---|---|---|---|
-| Empirical | 86.8% | 8.4% | 4.7% | 97.4% |
-| Best-fit CGT | 87.7% | 10.8% | 1.5% | 99.8% |
+| Cell 5 | 0.4 | 87.7% | 10.7% | 1.6% |
+| Cell 7 | 0.6 | 88.7% | 9.5% | 1.8% |
 
-Key insight: higher `RT` (= 1.5) introduces enough thermal noise to generate occasional rejections and late agreements. The remaining gap at Round 3 reflects ultimatum rejections (fairness-driven) that the Boltzmann model does not fully capture.
+Key insight: higher `RT` (= 1.5) introduces enough thermal noise to generate occasional rejections and late agreements. The remaining gap at Round 3 reflects ultimatum rejections driven by fairness concerns that the Boltzmann model does not fully capture.
+
+---
 
 ## Key references
 
