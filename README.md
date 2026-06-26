@@ -1,20 +1,24 @@
 # Rubinstein Ultimatum Game Simulation
 
-A small Python project comparing three approaches to the **Rubinstein alternating-offers ultimatum game**:
+A Python project comparing two approaches to the **Rubinstein alternating-offers bargaining game**:
 
-1. **Classical** — rational backward induction (Rubinstein-style equilibrium)
-2. **Behavioral** — fixed fairness thresholds and concessions
-3. **Chemical Game Theory (CGT)** — probabilistic acceptance via Boltzmann weights
+1. **Classical** — rational subgame-perfect equilibrium via backward induction
+2. **Chemical Game Theory (CGT)** — probabilistic acceptance derived from Gibbs free energy (ΔG) and Boltzmann statistics, calibrated against real experimental data
 
-The game runs for up to 3 rounds. After each rejection, the pie shrinks by the discount factor `DELTA` (default 0.8).
+## Background
+
+In the Rubinstein (1982) model, two players alternate making offers to split a pie. Each rejection costs time: the pie shrinks by a discount factor δ per round. Under perfect rationality, the unique equilibrium is reached immediately in Round 1.
+
+Ochs & Roth (1989) ran lab experiments on this game and found that real people deviate substantially from the equilibrium prediction — around 16% of games go past Round 1. CGT models this deviation by treating each player's decision as a probabilistic chemical reaction driven by free energy terms.
 
 ## Project structure
 
 | File | Purpose |
 |------|---------|
-| `models.py` | Core simulation engines (`simulate_classical`, `simulate_behavioral`, `simulate_chemical`) and shared parameters |
-| `simulation.py` | Runs 1,000 Monte Carlo trials per model and prints summary statistics |
-| `app.py` | Plots a grouped bar chart comparing ending-round distributions |
+| `models.py` | Two simulation engines (`simulate_classical`, `simulate_chemical`) and shared parameters |
+| `simulation.py` | Monte Carlo runner: 1,000 trials per model, prints summary statistics |
+| `app.py` | Bar chart comparing ending-round distributions for both models |
+| `calibrate.py` | Grid search over CGT parameters to fit Ochs & Roth (1989) empirical data |
 | `requirements.txt` | Python dependencies (`numpy`, `matplotlib`) |
 
 ## Setup
@@ -27,7 +31,7 @@ pip install -r requirements.txt
 
 ## How to run
 
-**Print simulation results** (average rounds, acceptance rate, round distribution):
+**Print simulation statistics** (average rounds, acceptance rate, round distribution):
 
 ```bash
 python simulation.py
@@ -39,45 +43,54 @@ python simulation.py
 python app.py
 ```
 
-The chart opens in a Matplotlib window. To save it instead, pass a path when calling `plot_round_distributions(save_path="results.png")` from Python.
+**Calibrate CGT parameters against Ochs & Roth (1989)**:
 
-## The three models (short version)
+```bash
+python calibrate.py
+```
+
+## The two models
 
 ### Classical (`simulate_classical`)
 
-Uses backward induction on a finite 3-round game. Under perfect rationality, the equilibrium offer is accepted immediately — every trial ends in **Round 1**.
+Backward induction on a finite 3-round game. Under perfect rationality the equilibrium offer is always accepted in Round 1 — every trial ends immediately. The equilibrium offer to the responder is ~28.8% of the pie with the default discount factor δ = 0.8.
 
 Key parameters: `TOTAL_PIE`, `DELTA`, `MAX_ROUNDS` (top of `models.py`).
 
-### Behavioral (`simulate_behavioral`)
-
-A simple stand-in for non-rational play: the responder has a minimum acceptable share, and the proposer starts low and increases the offer after each rejection.
-
-Key parameters:
-
-- `acceptance_threshold` — minimum share the responder requires (e.g. 0.30 = 30%)
-- `initial_offer_fraction` — opening offer
-- `concession_per_round` — how much the proposer raises the offer each round
-
-This model is **deterministic** with the default parameters (every trial ends in the same round). Monte Carlo mainly matters for the CGT model unless behavioral is extended with randomness.
-
 ### Chemical / CGT (`simulate_chemical`)
 
-Acceptance is **probabilistic**. Each round computes free-energy terms ΔG for accept vs. reject, then draws accept/reject from a Boltzmann distribution.
+Based on the framework in the CGT section of the project report. Each round, acceptance and rejection are treated as competing reaction pathways. Acceptance probability is computed via Boltzmann weighting of their Gibbs free energy terms:
+
+$$\Delta G_{\text{yes}}(m) = -\gamma_y \cdot m - \varepsilon$$
+$$\Delta G_{\text{no}}(m) = -\gamma_n \cdot m$$
+$$P(\text{yes}) = \frac{e^{-\Delta G_{\text{yes}}/RT}}{e^{-\Delta G_{\text{yes}}/RT} + e^{-\Delta G_{\text{no}}/RT}}$$
+
+where $m$ is the offer fraction to the responder. The constraint $\gamma_y > \gamma_n > 0$ ensures acceptance is always thermodynamically preferred, but small offers reduce the margin.
 
 Key parameters:
 
-- `RT` — noise / temperature (higher → more random)
-- `epsilon` — cooperative bias
-- `gamma_y`, `gamma_n` — weights on accepting vs. rejecting
-- `offer_fraction` — share of the pie offered each round
+| Parameter | Meaning |
+|-----------|---------|
+| `RT` | Thermal noise / temperature — higher = more random decisions |
+| `epsilon` | Intrinsic cooperation bias (acceptance even at m=0) |
+| `gamma_y` | Sensitivity of acceptance free energy to offer size |
+| `gamma_n` | Sensitivity of rejection free energy to offer size |
+| `offer_fraction` | Share of the current pie offered to the responder |
 
-## Tuning parameters
+## Calibration against Ochs & Roth (1989)
 
-Edit the defaults at the top of `models.py`, or pass keyword arguments when calling the simulate functions from your own scripts. Comments in `models.py` describe each parameter.
+`calibrate.py` fits CGT parameters to the empirical round distribution from the 3-period symmetric discount-factor cells (Cells 5 and 7 combined, n = 190 games):
 
-## Next steps (for the team)
+| | Round 1 | Round 2 | Round 3 | Acceptance rate |
+|---|---|---|---|---|
+| **Empirical** | 86.8% | 8.4% | 4.7% | 97.4% |
+| **Best-fit CGT** | 87.4% | 10.6% | 2.0% | 99.8% |
 
-- Pick empirical targets (e.g. share of games ending in Round 1 vs. 2 vs. 3)
-- Tune `DELTA` in the classical model to match **splits**; tune behavioral/CGT parameters to match **round distributions**
-- Consider making the behavioral model probabilistic for richer Monte Carlo output
+Best-fit parameters: `rt=1.5, epsilon=1.0, gamma_y=5.0, gamma_n=1.0, offer_fraction=0.45, delta=0.6`
+
+The remaining gap at Round 3 reflects a feature the model does not yet capture: in the experiment, subjects sometimes reject offers even in the final round (ultimatum rejections driven by fairness concerns), while the Boltzmann model always assigns a positive acceptance probability.
+
+## Key references
+
+- Rubinstein, A. (1982). *Perfect Equilibrium in a Bargaining Model*. Econometrica, 50(1), 97–109.
+- Ochs, J. & Roth, A. E. (1989). *An Experimental Study of Sequential Bargaining*. American Economic Review, 79(3), 355–384.

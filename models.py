@@ -58,49 +58,6 @@ def simulate_classical(
     )
 
 
-def simulate_behavioral(
-    max_rounds: int = MAX_ROUNDS,
-    total_pie: float = TOTAL_PIE,
-    delta: float = DELTA,
-    acceptance_threshold: float = 0.30,
-    initial_offer_fraction: float = 0.25,
-    concession_per_round: float = 0.05,
-) -> TrialResult:
-    """
-    Behavioral model with fixed human-like thresholds.
-
-    Parameters
-    ----------
-    acceptance_threshold : float
-        Minimum share of the *current* pie the responder requires (e.g. 0.30 = 30%).
-    initial_offer_fraction : float
-        Opening offer as a fraction of the current pie (often below the threshold).
-    concession_per_round : float
-        How much the proposer increases their offer after each rejection.
-    """
-    for round_num in range(1, max_rounds + 1):
-        pie = _pie_at_round(round_num, total_pie, delta)
-        offer_fraction = initial_offer_fraction + (round_num - 1) * concession_per_round
-        offer = offer_fraction * pie
-
-        if offer_fraction >= acceptance_threshold:
-            return TrialResult(
-                round_ended=round_num,
-                accepted=True,
-                offer_to_responder=offer,
-                pie_at_round=pie,
-            )
-
-    # Final round reached without agreement (responder never satisfied).
-    pie = _pie_at_round(max_rounds, total_pie, delta)
-    final_fraction = initial_offer_fraction + (max_rounds - 1) * concession_per_round
-    return TrialResult(
-        round_ended=max_rounds,
-        accepted=False,
-        offer_to_responder=final_fraction * pie,
-        pie_at_round=pie,
-    )
-
 
 def simulate_chemical(
     max_rounds: int = MAX_ROUNDS,
@@ -123,7 +80,8 @@ def simulate_chemical(
     epsilon : float
         Intrinsic cooperative bias (stabilizes "yes" when offers are reasonable).
     gamma_y, gamma_n : float
-        Gains for accepting vs. rejecting, scaled by offer share m and (1 - m).
+        Sensitivity of acceptance/rejection free energy to the offer fraction m.
+        gamma_y > gamma_n > 0 ensures acceptance is always thermodynamically preferred.
     offer_fraction : float
         Share m of the current pie offered to the responder each round.
     """
@@ -133,9 +91,13 @@ def simulate_chemical(
         pie = _pie_at_round(round_num, total_pie, delta)
         m = offer_fraction  # Responder's share of the current pie
 
-        # Free-energy terms (lower ΔG => more favorable state).
+        # Free-energy terms — teammate's formulation (Section: Chemical Game Theory):
+        #   ΔG_yes(m) = -γ_y · m - ε   (acceptance; always exergonic, ε adds cooperation bias)
+        #   ΔG_no(m)  = -γ_n · m       (rejection; neutral at m=0, more exergonic as m grows)
+        # Constraint γ_y > γ_n > 0 ensures |ΔG_yes| > |ΔG_no|, so acceptance is always
+        # thermodynamically preferred, but the margin shrinks for small offers.
         dg_yes = -gamma_y * m - epsilon
-        dg_no = -gamma_n * (1.0 - m)
+        dg_no = -gamma_n * m
 
         # Boltzmann probabilities: P(state) ∝ exp(-ΔG / RT)
         exp_yes = np.exp(-dg_yes / rt)

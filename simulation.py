@@ -7,7 +7,6 @@ from typing import Callable, Dict
 from models import (
     MAX_ROUNDS,
     TrialResult,
-    simulate_behavioral,
     simulate_chemical,
     simulate_classical,
 )
@@ -43,10 +42,9 @@ def summarize(name: str, results: list[TrialResult]) -> ModelSummary:
 
 
 def run_all(n_trials: int = N_TRIALS) -> Dict[str, ModelSummary]:
-    """Run Monte Carlo simulations for Classical, Behavioral, and CGT models."""
+    """Run Monte Carlo simulations for Classical and CGT models."""
     models = {
         "Classical": simulate_classical,
-        "Behavioral": simulate_behavioral,
         "Chemical (CGT)": simulate_chemical,
     }
     return {name: summarize(name, _run_trials(sim_fn, n_trials)) for name, sim_fn in models.items()}

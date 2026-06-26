@@ -5,7 +5,7 @@ from models import MAX_ROUNDS
 from simulation import run_all
 
 ROUND_LABELS = [f"Round {r}" for r in range(1, MAX_ROUNDS + 1)]
-COLORS = ["#4C72B0", "#DD8452", "#55A868"]  # Classical, Behavioral, CGT
+COLORS = ["#4C72B0", "#55A868"]  # Classical, CGT
 
 
 def plot_round_distributions(summaries=None, save_path: str | None = None) -> None:
